@@ -1,0 +1,453 @@
+
+```{r}
+if (!require(dplyr)) install.packages("dplyr")
+if (!require(caret)) install.packages("caret")
+install.packages("ggplot")
+library(dplyr)
+library(caret)
+install.packages("stringr")               # Install stringr package
+library(stringr)
+install.packages("cluster")
+
+install.packages("ggplot2")
+install.packages("readr")
+install.packages("magrittr") # package installations are only needed the first time you use it
+  # alternative installation of the %>%
+library(magrittr) # needs to be run every time you start R and want to use %>%
+ 
+install.packages("infotheo")
+library(infotheo)
+
+library(cluster)
+library(dplyr)
+library(ggplot)
+library(ggplot2)
+library(readr)
+install.packages("factoextra")
+library(factoextra)
+library(Rtsne)
+library(tidyr)
+install.packages("ggstatsplot")
+# Load the package
+library(ggstatsplot)
+install.packages("data.table")
+library(data.table)
+library(knitr)
+#setwd("/Users/y
+```
+
+
+```{r}
+CRM_original <- read.csv("CRMServiceContracts.csv")
+# View(head(CRM_original,10))     # look at data
+
+# only look at Won & Lost rows (exclude Pending)
+CRM_W_L <- CRM_original %>% 
+  filter(OpportunityStatus == 'Won' | OpportunityStatus == "Lost")
+
+```
+```{r}
+# count occurrences of values
+t1 <- cbind(table(CRM_original$OpportunityStatus), round(prop.table(table(CRM_original$OpportunityStatus))*100,2))
+colnames(t1) <- c("count", "percentage")
+t1
+t2 <- cbind(table(CRM_original$SalesStage), round(prop.table(table(CRM_original$SalesStage))*100,2))
+colnames(t2) <- c("count", "percentage")
+t2
+```
+```{r}
+CRM_clean <- subset(CRM_W_L, select = -c(LOB, BranchNo, SalesStage, CREATED_DATE, CREATED_FY, PROPOSED_DATE, PROPOSED_FY, AWARD_CLOSED_DATE, AWARD_CLOSED_FY, ReasonWonLost, BasisOfDesign, Rise, Speed, Usage, Voltage, BaseBidQuoteNumber, CompetitorPrice, ExistingOldContractValue, FactoryMaterialCostUnit, LaborCost, PurchaseMatrialCost, ContractTermsMonths, TotalLaborHours, OpportunityProbabilityPct, UnitSerialNo, Category, OpportunityKey, OpportunityProductKey, AccountID, OpportunityDetailID, CRMUserID, EmployeeNo))
+
+# FIX DATA
+
+# change missing to 0 (zero)
+CRM_clean$Capacity[CRM_clean$Capacity == "N/A"] <- 0
+CRM_clean$Capacity[CRM_clean$Capacity == "NULL"] <- 0
+CRM_clean$Capacity[CRM_clean$Capacity == "Unknown"] <- 0
+CRM_clean$Capacity[CRM_clean$Capacity == "Less than 25"] <- 20
+CRM_clean$Capacity[CRM_clean$Capacity == "<2100"] <- 2000
+CRM_clean$Capacity[CRM_clean$Capacity == "Greater than 60000"] <- 65000
+CRM_clean$FrontOpeningsCnt[CRM_clean$FrontOpeningsCnt == "NULL"] <- 0
+CRM_clean$FrontOpeningsCnt[CRM_clean$FrontOpeningsCnt == "Unknown"] <- 0
+CRM_clean$RearOpeningsCnt[CRM_clean$RearOpeningsCnt == "NULL"] <- 0
+CRM_clean$RearOpeningsCnt[CRM_clean$RearOpeningsCnt == "Unknown"] <- 0
+CRM_clean$StopsCnt[CRM_clean$StopsCnt == "NULL"] <- 0
+CRM_clean$StopsCnt[CRM_clean$StopsCnt == "Unknown"] <- 0
+CRM_clean$OpportunityUnitCnt[is.na(CRM_clean$OpportunityUnitCnt)] <- 0
+CRM_clean$PricePerUnit[is.na(CRM_clean$PricePerUnit)] <- 0
+CRM_clean$ExpectedEagleRevenue[CRM_clean$ExpectedEagleRevenue == "NULL"] <- 0
+# change character to numeric
+CRM_clean$Capacity <- as.numeric(gsub(",", "", CRM_clean$Capacity))
+CRM_clean$FrontOpeningsCnt <- as.numeric(gsub(",", "", CRM_clean$FrontOpeningsCnt))
+CRM_clean$RearOpeningsCnt <- as.numeric(gsub(",", "", CRM_clean$RearOpeningsCnt))
+CRM_clean$StopsCnt <- as.numeric(gsub(",", "", CRM_clean$StopsCnt))
+CRM_clean$ExpectedEagleRevenue <- as.numeric(CRM_clean$ExpectedEagleRevenue)
+
+```
+```{r}
+# barchart for Won / Loss
+ggplot(CRM_W_L %>%
+         count(OpportunityStatus) %>%
+         mutate(pct = n/sum(n)),
+       aes(OpportunityStatus, n, fill = OpportunityStatus)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(sprintf("%1.1f", pct*100), "%")),
+            position = position_stack(vjust = 0.5), check_overlap = TRUE) +
+  scale_y_continuous(labels = scales::comma)
+```
+```{r}
+# stacked barchart on Region
+ggplot(CRM_W_L %>% 
+         group_by(Region) %>%
+         count(Region, OpportunityStatus) %>%
+         mutate(pct=n/sum(n)),
+       aes(Region, n, fill=OpportunityStatus)) +
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(sprintf("%1.1f", pct*100),"%")), 
+            position=position_stack(vjust=0.5), check_overlap = TRUE) +
+  coord_flip()
+```
+```{r}
+# stacked barchart on Type of Sale
+ggplot(CRM_W_L %>% 
+         group_by(TypeOfSale) %>%
+         count(TypeOfSale, OpportunityStatus) %>%
+         mutate(pct=n/sum(n)),
+       aes(TypeOfSale, n, fill=OpportunityStatus)) +
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(sprintf("%1.1f", pct*100),"%")), 
+            position=position_stack(vjust=0.5), check_overlap = TRUE) +
+  coord_flip()
+
+```
+```{r}
+# stacked barchart on Competitor Name
+ggplot(CRM_W_L %>% 
+         group_by(CompetitorName) %>%
+         count(CompetitorName, OpportunityStatus) %>%
+         mutate(pct=n/sum(n)),
+       aes(CompetitorName, n, fill=OpportunityStatus)) +
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(sprintf("%1.1f", pct*100),"%")), 
+            position=position_stack(vjust=0.5), check_overlap = TRUE)
+
+```
+```{r}
+# stacked barchart on Market Segment
+ggplot(CRM_W_L %>% 
+         group_by(MarketSegment) %>%
+         count(MarketSegment, OpportunityStatus) %>%
+         mutate(pct=n/sum(n)),
+       aes(MarketSegment, n, fill=OpportunityStatus)) +
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(sprintf("%1.1f", pct*100),"%")), 
+            position=position_stack(vjust=0.5), check_overlap = TRUE) +
+  coord_flip()
+```
+
+```{r}
+# Capacity
+boxplot(Capacity ~ OpportunityStatus, data = CRM_clean)
+```
+```{r}
+# FrontOpentingsCnt
+boxplot(FrontOpeningsCnt ~ OpportunityStatus, data = CRM_clean)
+```
+```{r}
+# OpportunityProductRevenue
+boxplot(OpportunityProductRevenue ~ OpportunityStatus, data = CRM_clean)
+```
+```{r}
+# MarginDollars
+boxplot(MarginDollars ~ OpportunityStatus, data = CRM_clean)
+```
+
+```{r}
+# stacked barchart on Product Category
+ggplot(CRM_W_L %>% 
+         group_by(ProductCategory) %>%
+         count(ProductCategory, OpportunityStatus) %>%
+         mutate(pct=n/sum(n)),
+       aes(ProductCategory, n, fill=OpportunityStatus)) +
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(sprintf("%1.1f", pct*100),"%")), 
+            position=position_stack(vjust=0.5), check_overlap = TRUE)
+```
+```{r}
+# only look at Won & Lost rows (exclude Pending)
+CRM_W_L <- CRM_original %>% 
+  filter(OpportunityStatus == 'Won' | OpportunityStatus == "Lost")
+
+### CLEAN DATA ###
+
+# delete columns that have too much info missing or are not applicable for win/loss analysis
+CRM_clean <- subset(CRM_W_L, select = -c(LOB, BranchNo, SalesStage, CREATED_DATE, CREATED_FY, PROPOSED_DATE, PROPOSED_FY, AWARD_CLOSED_DATE, AWARD_CLOSED_FY, ReasonWonLost, BasisOfDesign, Rise, Speed, Usage, Voltage, BaseBidQuoteNumber, CompetitorPrice, ExistingOldContractValue, FactoryMaterialCostUnit, LaborCost, PurchaseMatrialCost, ContractTermsMonths, TotalLaborHours, OpportunityExpectedRevenue, OpportunityProbabilityPct, OpportunityProductProbabilityPct, UnitSerialNo, Category, OpportunityKey, OpportunityProductKey, AccountID, OpportunityDetailID, CRMUserID, EmployeeNo))
+
+# FIX DATA
+
+# change missing to 0 (zero)
+CRM_clean$Capacity[CRM_clean$Capacity == "N/A"] <- 0
+CRM_clean$Capacity[CRM_clean$Capacity == "NULL"] <- 0
+CRM_clean$Capacity[CRM_clean$Capacity == "Unknown"] <- 0
+CRM_clean$Capacity[CRM_clean$Capacity == "Less than 25"] <- 20
+CRM_clean$Capacity[CRM_clean$Capacity == "<2100"] <- 2000
+CRM_clean$Capacity[CRM_clean$Capacity == "Greater than 60000"] <- 65000
+CRM_clean$FrontOpeningsCnt[CRM_clean$FrontOpeningsCnt == "NULL"] <- 0
+CRM_clean$FrontOpeningsCnt[CRM_clean$FrontOpeningsCnt == "Unknown"] <- 0
+CRM_clean$RearOpeningsCnt[CRM_clean$RearOpeningsCnt == "NULL"] <- 0
+CRM_clean$RearOpeningsCnt[CRM_clean$RearOpeningsCnt == "Unknown"] <- 0
+CRM_clean$StopsCnt[CRM_clean$StopsCnt == "NULL"] <- 0
+CRM_clean$StopsCnt[CRM_clean$StopsCnt == "Unknown"] <- 0
+CRM_clean$OpportunityUnitCnt[is.na(CRM_clean$OpportunityUnitCnt)] <- 0
+CRM_clean$PricePerUnit[is.na(CRM_clean$PricePerUnit)] <- 0
+CRM_clean$ExpectedEagleRevenue[CRM_clean$ExpectedEagleRevenue == "NULL"] <- 0
+# change character to numeric
+CRM_clean$Capacity <- as.numeric(gsub(",", "", CRM_clean$Capacity))
+CRM_clean$FrontOpeningsCnt <- as.numeric(gsub(",", "", CRM_clean$FrontOpeningsCnt))
+CRM_clean$RearOpeningsCnt <- as.numeric(gsub(",", "", CRM_clean$RearOpeningsCnt))
+CRM_clean$StopsCnt <- as.numeric(gsub(",", "", CRM_clean$StopsCnt))
+CRM_clean$ExpectedEagleRevenue <- as.numeric(CRM_clean$ExpectedEagleRevenue)
+
+
+## REGROUP DATA FOR INTERACTION TERM ANALYSIS ##
+
+regroup <- cbind(CRM_clean)
+regroup %>% count(Region, sort = TRUE)
+
+# Region Data
+regroup$Region <-gsub('Unknown', 'Other', regroup$Region)
+regroup$Region <-gsub('CALIFORNIA', 'Other', regroup$Region)
+regroup$Region <-gsub('CENTRAL', 'Other', regroup$Region)
+regroup$Region <-gsub('FLORIDA', 'Other', regroup$Region)
+regroup$Region <-gsub('SOUTHEAST', 'Other', regroup$Region)
+regroup$Region <-gsub('SOUTH', 'Other', regroup$Region)
+regroup$Region <-gsub('PACIFIC NORTHWEST', 'Other', regroup$Region)
+regroup$Region <-str_replace(regroup$Region, 'Other.*', 'Other')
+
+regroup %>% count(Region, sort = TRUE)
+
+# Competitor Data
+regroup %>% count(CompetitorName, sort = TRUE)
+regroup$CompetitorName <-gsub('Unknown', 'Other', regroup$CompetitorName)
+regroup$CompetitorName <-gsub('None', 'Other', regroup$CompetitorName)
+regroup$CompetitorName <-gsub('Fujitec', 'Other', regroup$CompetitorName)
+regroup$CompetitorName <-gsub('Mitsubishi', 'Other', regroup$CompetitorName)
+
+regroup %>% count(CompetitorName, sort = TRUE)
+
+```
+```{r}
+# Adding dummy variable to Opportunity Status (Won=1, Lost=0)
+CRM_clean <- CRM_clean %>%
+  mutate(OpportunityStatus = ifelse(OpportunityStatus=="Won",1,0))
+
+### TESTING AND TRAINING SETS ###
+
+# ensure the results are repeatable
+set.seed(123) # base seed is 123; also tried 513, 67, 8, 8753
+
+# split data into training (80%), test (20%) sets
+splitdata <- CRM_clean$Region %>%
+  createDataPartition(p=0.8, list=FALSE)
+#splitdata<-splitdata[splitdata<=170346]
+training <- CRM_clean[splitdata,]
+testing <- CRM_clean[-splitdata,]
+
+# create dummy variables for categorical predictor variables
+m <- model.matrix(OpportunityStatus~., CRM_clean)[,-1]
+x.train <- m[splitdata,]
+x.test <- m[-splitdata,]
+y.train <- training$OpportunityStatus
+y.test <- testing$OpportunityStatus
+# create data frame testing and training sets
+x.test.df <- subset(testing, select = -c(OpportunityStatus))
+
+```
+```{r}
+### FULL LOGISTIC REGRESSION ###
+
+# train model
+full_model <- glm(formula = OpportunityStatus ~. , family = binomial, data = training) # takes a couple minutes to run
+summary(full_model)
+
+# output results to a csv file
+# out_log <- summary.glm(full_model)$coefficients
+# write.csv(out_log, "fullmodel_output.csv")
+
+# predict on test data
+probabilities <- full_model %>% predict(x.test.df, type = "response")
+predicted.classes <- ifelse(probabilities > mean(training$OpportunityStatus), 1, 0)
+
+# model accuracy
+observed.classes <- y.test
+mean(predicted.classes == observed.classes)
+confusion <- table(predicted.classes, observed.classes)
+confusion
+sum(diag(confusion)) / sum(confusion)
+confusion[1,1] / sum(confusion[,1])  # PCP for 0 - Lost
+confusion[2,2] / sum(confusion[,2])  # PCP for 1 - Won
+
+# removed insignificant variables and re-ran the model
+
+final_model <- glm(formula = OpportunityStatus ~ Region+TypeOfSale+CompetitorName+MarketSegment+Capacity+FrontOpeningsCnt+OpportunityProductRevenue+MarginDollars+GrossMarginPct+OpportunityProductExpectedRevenue+PricePerUnit+ExpectedEagleRevenue+OpportunityProductUnitCnt, family = binomial, data = training)
+summary(final_model)
+
+```
+```{r}
+# predict on test data
+probabilities2 <- predict(final_model, type = "response", newdata = x.test.df)
+predicted.classes2 <- ifelse(probabilities2 > mean(training$OpportunityStatus), 1, 0)
+
+# model accuracy
+observed.classes2 <- y.test
+mean(predicted.classes2 == observed.classes2)
+confusion2 <- table(predicted.classes2, observed.classes2)
+confusion2
+sum(diag(confusion2)) / sum(confusion2)
+#confusion2[1,1] / sum(confusion2[,1])  # PCP for 0 - Lost
+#confusion2[2,2] / sum(confusion2[,2])  # PCP for 1 - Won
+
+# Feature Importance for final model
+
+importance <- varImp(final_model)
+importance
+# write.csv(importance, "feature_importance.csv")
+
+# save final model
+# saveRDS(final_model, "prediction_model.rds")
+```
+```{r}
+# Creating Customer Segmentation
+
+#CRM_original <- read.csv("crmdata.csv")
+CRM_original <- read.csv("crmdata.csv")
+
+
+
+
+Region<- CRM_original$Region.DESC
+Subtype<- CRM_original$Unit.Subtype.DESC
+Market <- CRM_original$Market.Segment.DESC
+coveragetype<-CRM_original$Coverage.Type.DESC
+sizeofcustomer<- CRM_original$CustomerSize
+price <- CRM_original$pricepucrm
+Quantity<-1:nrow(CRM_original)
+
+```
+
+```{r}
+df = data.frame(region=Region,subtype=Subtype,market=Market,coveragetype=coveragetype,price=price)
+df<-df[!(df$market=="Unknown"),]
+df<-na.omit(df)
+#boxplot(df$price,plot = FALSE)$out
+
+
+#clustering and segmentation
+
+
+allrows<-1:nrow(df)
+
+
+
+
+trainrows <- sample(allrows, replace = F, size = 0.15*length(allrows))
+df<-df[trainrows,]
+
+gower_df <- daisy(df, metric = "gower")
+
+
+```
+```{r}
+silhouette <- c()
+silhouette = c(silhouette, NA)
+
+#silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+#cluster size=2
+
+pam_clusters = pam(gower_df, diss = TRUE, k = 2)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 3)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 4)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 5)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 6)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 7)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 8)
+df[pam_clusters$medoids,]
+
+
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+pam_clusters = pam(gower_df, diss = TRUE, k = 9)
+df[pam_clusters$medoids,]
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+#pam_clusters = pam(gower_df, diss = TRUE, k = 10)
+#df[pam_clusters$medoids,]
+
+dd <- cbind(df, cluster = pam_clusters$cluster)
+
+silhouette = c(silhouette ,pam_clusters$silinfo$avg.width)
+```
+```{r}
+write.csv(dd,"all_clusters.csv")
+write.csv(df[pam_clusters$medoids,],"cluster_centroids.csv")
+
+silhouette[0]<-0
+#pam_clusters$data<-df
+
+#fviz_cluster(pam_clusters)
+
+plot(2:9, silhouette[2:9],
+     xlab = "Clusters",
+     ylab = "Silhouette Width")
+
+
+lines(2:9,silhouette[2:9],color='black')
+
+```
+
