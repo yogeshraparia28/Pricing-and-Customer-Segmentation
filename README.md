@@ -11,7 +11,7 @@ o	Predict wins and losses.
 •	It answers the question:
 o	What are the correct pricing / customer segments?
 2.InactiveContracts (Active_inactiv.ipynb)
-•	This folder contains all the files for why inactive service contracts are lost.
+•	This file contains code to find out why inactive service contracts are lost.
 •	It answers the question:
 o	What attributes indicate why a contract was cancelled?
 
