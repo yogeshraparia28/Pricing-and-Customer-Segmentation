@@ -2,7 +2,7 @@
 
 
 
-1.WinLossPrediction (Pricing and Segmentation.Rmd)
+1.WinLossPrediction (Source Code : Pricing and Segmentation.Rmd, Output/Result : Pricing and Segmentation.html )
 •	This folder contains all the files to perform win/loss analysis on the CRM data.
 •	It answers the questions:
 o	What are common attributes for wins and losses?
